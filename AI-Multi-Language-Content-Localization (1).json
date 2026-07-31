@@ -1,0 +1,485 @@
+{
+  "name": "AI-Multi-Language-Content-Localization",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "1lgYM-OV8QLiL-UR4kfrhKcCda9b-SESMLv5ftIb4WDg",
+          "mode": "list",
+          "cachedResultName": "Content_Localization",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lgYM-OV8QLiL-UR4kfrhKcCda9b-SESMLv5ftIb4WDg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lgYM-OV8QLiL-UR4kfrhKcCda9b-SESMLv5ftIb4WDg/edit#gid=0"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        96
+      ],
+      "id": "0f2b6d1b-b2ab-470a-8ce2-7f6a6bdcd55d",
+      "name": "Google Sheets Trigger",
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "sxqrxyGHUUvftHqt",
+          "name": "Google Sheets Trigger account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "73658997-aed1-4c8d-ac4d-909b28cac13e",
+              "name": "sourceText",
+              "value": "={{ $json['English Content'] }}",
+              "type": "string"
+            },
+            {
+              "id": "8575a892-9f55-4ade-b90e-b8ce501b1be9",
+              "name": "rowId",
+              "value": "={{ $json['Content ID'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        448,
+        96
+      ],
+      "id": "7a148674-173e-4bc3-8453-7d3d8dfc3f3b",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        896,
+        96
+      ],
+      "id": "380052b1-bed6-4926-8c9c-110e1dc77da3",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://router.huggingface.co/hf-inference/models/{{ $json.modelName }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": " Bearer  {{your Api kry}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json "
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"inputs\": \"{{ $json.sourceText }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        96
+      ],
+      "id": "143a11b2-5c60-4de3-9d9e-5263dcb496b6",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const sourceText = $json.sourceText.replace(/\\n/g, ' ').replace(/\\r/g, '');\nconst rowNumber = $json.rowId;\n\nconst targets = [\n  { lang: \"Urdu\", model: \"Helsinki-NLP/opus-mt-en-ur\" },\n  { lang: \"Arabic\", model: \"Helsinki-NLP/opus-mt-en-ar\" },\n  { lang: \"French\", model: \"Helsinki-NLP/opus-mt-en-fr\" }\n];\n\nreturn targets.map(t => ({\n  json: {\n    sourceText,\n    rowNumber,\n    targetLang: t.lang,\n    modelName: t.model\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ],
+      "id": "f02d0d1e-e9de-4b3a-be95-d3abcc190b77",
+      "name": "Build Language Payloads"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        -96
+      ],
+      "id": "12fe5cbb-392d-4226-95ec-19ff28a6050a",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nlet translatedText = \"\";\n\nif (Array.isArray(response) && response[0]?.translation_text) {\n  // response came through as an array\n  translatedText = response[0].translation_text;\n} else if (response.translation_text) {\n  // response came through as a plain object (n8n auto-unwrapped it)\n  translatedText = response.translation_text;\n} else {\n  translatedText = \"TRANSLATION_ERROR\";\n}\n\nreturn [{\n  json: {\n    rowNumber: $('Build Language Payloads').item.json.rowNumber,\n    targetLang: $('Build Language Payloads').item.json.targetLang,\n    translatedText\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        176
+      ],
+      "id": "35b911b0-d1e7-4cf4-88ea-11dc3b547d2e",
+      "name": "Parse Translation Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst nested = items[0].json.data;\n\nconst result = {};\n\nfor (const entry of nested) {\n  result.rowId = entry.rowNumber;\n  result[entry.targetLang] = entry.translatedText;\n}\n\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        -96
+      ],
+      "id": "4816b87d-cbbd-480a-b444-011de59b55a5",
+      "name": "Reshape"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1lgYM-OV8QLiL-UR4kfrhKcCda9b-SESMLv5ftIb4WDg",
+          "mode": "list",
+          "cachedResultName": "Content_Localization",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lgYM-OV8QLiL-UR4kfrhKcCda9b-SESMLv5ftIb4WDg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lgYM-OV8QLiL-UR4kfrhKcCda9b-SESMLv5ftIb4WDg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Content ID": "={{ $json.rowId }}",
+            "Urdu Translation": "={{ $json.Urdu }}",
+            "Arabic Translation": "={{ $json.Arabic }}",
+            "French Translation": "={{ $json.French }}",
+            "Status": "Translated"
+          },
+          "matchingColumns": [
+            "Content ID"
+          ],
+          "schema": [
+            {
+              "id": "Content ID",
+              "displayName": "Content ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "English Content",
+              "displayName": "English Content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Urdu Translation",
+              "displayName": "Urdu Translation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Arabic Translation",
+              "displayName": "Arabic Translation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "French Translation",
+              "displayName": "French Translation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1568,
+        -96
+      ],
+      "id": "560be4be-bd11-4038-944a-a373274babbe",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "jyBrdvwGbNwbRvzx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "bitzsol04@gmail.com",
+        "subject": "=Translations Ready – Row {{ $json['Content ID'] }}",
+        "emailType": "text",
+        "message": "=Hi team,  Row {{ $json['Content ID'] }} has been translated and updated in the tracker.\n\nUrdu: {{ $json['Urdu Translation'] }}\n\nArabic: {{ $json['Arabic Translation'] }} \n\nFrench: {{ $json['French Translation'] }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        -96
+      ],
+      "id": "be01359f-9a8b-46f5-a312-c637cbd1ba2b",
+      "name": "Send a message",
+      "webhookId": "7c85c71e-c7e5-497d-8f23-2d74c11d0ae8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "EVOjEdj7hRsomIMX",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "748fa8f6-d099-4cb2-8f59-9cd488b417cb",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "Translated",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        96
+      ],
+      "id": "5b920e61-2559-4ed9-8da4-509ec0a3fd61",
+      "name": "Filter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Build Language Payloads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Parse Translation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Language Payloads": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Translation Response": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Reshape",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reshape": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "64db05d8-a380-4d88-876a-6663d44828b3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5e80fc5cba45021026f9649da27f547bc7c060d290193996d952194d857bf018"
+  },
+  "nodeGroups": [],
+  "id": "3L5mu99doCZIAvwg",
+  "tags": []
+}
